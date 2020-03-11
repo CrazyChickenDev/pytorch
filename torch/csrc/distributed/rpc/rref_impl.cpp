@@ -78,18 +78,26 @@ UserRRef::UserRRef(
   //     properly notify the owner.
 }
 
-UserRRef::~UserRRef() {
-  try {
-    RRefContext::getInstance().delUser(ownerId_, rrefId_, forkId_);
-  } catch (const std::exception& ex) {
-    LOG(ERROR) << "Error occurred when deleting UserRRef instance, "
-               << "RRefId = " << rrefId_ << ", ForkId = " << forkId_ << " : "
-               << ex.what();
-  } catch (...) {
-    LOG(ERROR) << "Error occurred when deleting UserRRef instance, "
-               << "RRefId = " << rrefId_ << ", ForkId = " << forkId_ << " : "
-               << "unknown error";
+void UserRRef::tryDel() {
+  std::lock_guard<std::mutex> lockGuard(sentDelUserMutex_);
+  if (!sentDelUser_) {
+    try {
+      RRefContext::getInstance().delUser(ownerId_, rrefId_, forkId_);
+      sentDelUser_ = true;
+    } catch (const std::exception& ex) {
+      LOG(ERROR) << "Error occurred when deleting UserRRef instance, "
+                 << "RRefId = " << rrefId_ << ", ForkId = " << forkId_ << " : "
+                 << ex.what();
+    } catch (...) {
+      LOG(ERROR) << "Error occurred when deleting UserRRef instance, "
+                 << "RRefId = " << rrefId_ << ", ForkId = " << forkId_ << " : "
+                 << "unknown error";
+    }
   }
+}
+
+void UserRRef::release_resources() {
+  tryDel();
 }
 
 const ForkId& UserRRef::forkId() const {
